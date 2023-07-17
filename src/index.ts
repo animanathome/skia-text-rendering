@@ -273,9 +273,9 @@ const drawAnimatedText = async() => {
 }
 
 const drawParagraphV2 = async() => {
-    // await new Promise((resolve, reject) => {
-    //    setTimeout(() => resolve('done'), 1000);
-    // });
+    await new Promise((resolve, reject) => {
+       setTimeout(() => resolve('done'), 1000);
+    });
     console.log('done')
 
     const canvasKit = await loadCanvasKit() as any;
@@ -297,6 +297,7 @@ const drawParagraphV2 = async() => {
 
     const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSans-Medium.ttf');
     const strArray = text.split(' ')
+    // const strArray = 'Potatoes are brown, a common knowledge for many'.split(' ')
     console.log('word count', strArray.length);
 
     const fontMgr = canvasKit.FontMgr.FromData([notoData]);
