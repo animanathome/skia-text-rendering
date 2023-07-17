@@ -2,7 +2,7 @@ export const getParagraph = (text, canvasKit, style, fontMgr) => {
     const builder = canvasKit.ParagraphBuilder.Make(style, fontMgr);
     builder.addText(text);
     const paragraph = builder.build();
-    const layoutWidth = 450;
+    const layoutWidth = 600;
     paragraph.layout(layoutWidth);
 
     // getShapedLines doesn't link the use font. This makes it impossible to calculate

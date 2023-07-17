@@ -375,9 +375,75 @@ const drawParagraphV2 = async() => {
     surface.requestAnimationFrame(draw);
 }
 
+const drawDifferentFontSizes = async() => {
+    const canvasKit = await loadCanvasKit() as any;
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 900;
+    document.body.appendChild(canvas);
+    canvas.id = 'canvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+
+    const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSans-Medium.ttf');
+    const notoChineseData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSansSC-Medium.otf');
+    const notoHebrewData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSansHebrew-Medium.ttf');
+    const notoText = '诶必西弟衣艾付记爱耻挨宅开饿罗饿母恩呕披酷耳艾斯踢忧维大波留埃克斯歪再得אבגדהוזחטיכלמנסעפצקרשתABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=`~';
+
+    const fontMgr = canvasKit.FontMgr.FromData([notoData, notoChineseData, notoHebrewData]);
+    const fontCount = fontMgr.countFamilies();
+    const fontFamilyNames : string[] = [];
+    for (let i = 0; i < fontCount; i++) {
+        fontFamilyNames.push(fontMgr.getFamilyName(i));
+    }
+
+    const largeStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.BLACK,
+            fontFamilies: fontFamilyNames,
+            fontSize: 48,
+        }
+    });
+    const largeMetrics = getParagraph(notoText, canvasKit, largeStyle, fontMgr);
+
+    const mediumStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.BLACK,
+            fontFamilies: fontFamilyNames,
+            fontSize: 32,
+        }
+    });
+    const mediumMetrics = getParagraph(notoText, canvasKit, mediumStyle, fontMgr);
+
+    const smallStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.BLACK,
+            fontFamilies: fontFamilyNames,
+            fontSize: 16,
+        }
+    });
+    const smallMetrics = getParagraph(notoText, canvasKit, smallStyle, fontMgr);
+
+    const draw = (canvas) => {
+        surface.requestAnimationFrame(draw);
+        canvas.clear(canvasKit.WHITE);
+
+        let xOffset = 0;
+        let yOffset = 0;
+        yOffset += 10;
+        canvas.drawParagraph(largeMetrics.paragraph, xOffset, yOffset);
+        yOffset += largeMetrics.height;
+        canvas.drawParagraph(mediumMetrics.paragraph, xOffset, yOffset);
+        yOffset += mediumMetrics.height;
+        canvas.drawParagraph(smallMetrics.paragraph, xOffset, yOffset);
+
+    }
+    surface.requestAnimationFrame(draw);
+}
+
 // drawGradient()
 // drawRomanTextAndSelectObject();
 // drawBengaliTextAndSelectWord();
 // drawMaskedText();
 // drawAnimatedText();
-drawParagraphV2();
+// drawParagraphV2();
+drawDifferentFontSizes();
