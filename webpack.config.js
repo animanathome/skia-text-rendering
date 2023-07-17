@@ -40,9 +40,9 @@ module.exports = {
   },
   plugins: [
       new CopyWebpackPlugin({
-        patterns: [{
-          from: './node_modules/canvaskit-wasm/bin/canvaskit.wasm'
-        }]
+        patterns: [
+            {from: './node_modules/canvaskit-wasm/bin/profiling/canvaskit.wasm'},
+        ]
       }),
       new HtmlWebpackPlugin({
         title: 'Output Management',

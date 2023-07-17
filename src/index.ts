@@ -1,9 +1,10 @@
 import type {CanvasKit} from "canvaskit-wasm";
 import {Font, Paint, TypefaceFactory, TypefaceFontProvider} from "canvaskit-wasm";
 import {getArrayMetrics, getParagraph, textMetrics} from "./utils";
+import {text} from "./text";
 
 // TODO: what are the different versions?
-const CanvasKitInit = require('canvaskit-wasm/bin/canvaskit.js')
+const CanvasKitInit = require('canvaskit-wasm/bin/profiling/canvaskit.js')
 
 let canvasKit:CanvasKit | null = null;
 const loadCanvasKit = async() => {
@@ -272,10 +273,15 @@ const drawAnimatedText = async() => {
 }
 
 const drawParagraphV2 = async() => {
+    // await new Promise((resolve, reject) => {
+    //    setTimeout(() => resolve('done'), 1000);
+    // });
+    console.log('done')
+
     const canvasKit = await loadCanvasKit() as any;
     const canvas = document.createElement('canvas');
     canvas.width = 600;
-    canvas.height = 600;
+    canvas.height = 900;
     document.body.appendChild(canvas);
     canvas.id = 'canvas';
     const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
@@ -290,7 +296,8 @@ const drawParagraphV2 = async() => {
     // const strArray = 'תפוחי אדמה חומים'.split(' ').reverse();
 
     const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSans-Medium.ttf');
-    const strArray = 'potatoes are brown'.split(' ')
+    const strArray = text.split(' ')
+    console.log('word count', strArray.length);
 
     const fontMgr = canvasKit.FontMgr.FromData([notoData]);
     const fontCount = fontMgr.countFamilies();
@@ -299,44 +306,69 @@ const drawParagraphV2 = async() => {
         fontFamilyNames.push(fontMgr.getFamilyName(i));
     }
 
-    const paraStyle = new canvasKit.ParagraphStyle({
+    const titleStyle = new canvasKit.ParagraphStyle({
         textStyle: {
             color: canvasKit.BLACK,
             fontFamilies: fontFamilyNames,
-            fontSize: 50,
+            fontSize: 36,
             halfLeading: false,
             heightMultiplier: 1.0,
         },
         textAlign: canvasKit.TextAlign.Left,
-        textDirection: canvasKit.TextDirection.RTL,
+        textDirection: canvasKit.TextDirection.Left,
     });
 
-    const arrayMetrics = strArray.map((str) => getParagraph(str, canvasKit, paraStyle, fontMgr));
+    const textStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.BLACK,
+            fontFamilies: fontFamilyNames,
+            fontSize: 14,
+            halfLeading: false,
+            heightMultiplier: 1.0,
+        },
+        textAlign: canvasKit.TextAlign.Left,
+        textDirection: canvasKit.TextDirection.Left,
+    });
+
+    const title = 'Potatoes are brown'
+    const titleMetrics = getParagraph(title, canvasKit, titleStyle, fontMgr);
+    const textArrayMetrics = strArray.map((str) => getParagraph(str, canvasKit, textStyle, fontMgr));
 
     const maskPaint = new canvasKit.Paint();
-    // maskPaint.setColor(canvasKit.Color(255, 0, 0, 0.5));
+    maskPaint.setColor(canvasKit.Color(255, 0, 0, 0.5));
     maskPaint.setStyle(canvasKit.PaintStyle.Fill);
-    const space = 20;
+    const space = 4;
 
-    const maskArray = [1.0, 0.75, 0.5, 0.25, 0.0];
+    const maskArray = Array.from({length: strArray.length}, () => Math.random());
 
     const draw = (canvas) => {
         surface.requestAnimationFrame(draw);
         canvas.clear(canvasKit.WHITE);
 
         let xOffset = 0;
+        let yOffset = 0;
+
+        canvas.drawParagraph(titleMetrics.paragraph, 0, 10);
+        yOffset += titleMetrics.height;
+
         maskPaint.setBlendMode(canvasKit.BlendMode.DstIn);
-        arrayMetrics.forEach(({paragraph, width, height}, index) => {
+        textArrayMetrics.forEach(({paragraph, width, height}, index) => {
             // draw word
-            canvas.drawParagraph(paragraph, xOffset, 10);
+            canvas.drawParagraph(paragraph, xOffset, yOffset + 10);
 
             // draw mask
             maskPaint.setAlphaf(maskArray[index]);
             const path = new canvasKit.Path();
-            path.addRect(canvasKit.XYWHRect(xOffset, 5, width, height));
+            path.addRect(canvasKit.XYWHRect(xOffset, yOffset + 10, width, height));
             canvas.drawPath(path, maskPaint);
+            path.delete();
 
+            // new line
             xOffset += width + space;
+            if (textArrayMetrics[index + 1] && xOffset + textArrayMetrics[index + 1].width > 600) {
+                xOffset = 0;
+                yOffset += height + space;
+            }
         });
     }
     surface.requestAnimationFrame(draw);

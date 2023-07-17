@@ -1,5 +1,4 @@
 export const getParagraph = (text, canvasKit, style, fontMgr) => {
-    console.log('getParagraph', text)
     const builder = canvasKit.ParagraphBuilder.Make(style, fontMgr);
     builder.addText(text);
     const paragraph = builder.build();
