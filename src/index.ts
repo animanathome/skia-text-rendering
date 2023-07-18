@@ -1,5 +1,5 @@
 import type {CanvasKit, FontBlock} from "canvaskit-wasm";
-import {Font, Paint, TypefaceFactory, TypefaceFontProvider} from "canvaskit-wasm";
+import {Font, FontCollectionFactory, Paint, TypefaceFactory, TypefaceFontProvider} from "canvaskit-wasm";
 import {getArrayMetrics, getParagraph, textMetrics} from "./utils";
 import {text} from "./text";
 
@@ -149,6 +149,47 @@ const drawBengaliTextAndSelectWord = async() => {
     surface.requestAnimationFrame(draw);
 }
 
+
+/**
+ * Draw text using drawGlyphs method. Does not support any kerning or ligatures.
+ */
+const drawGlyphs = async() => {
+    const canvasKit = await loadCanvasKit() as any;
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 900;
+    document.body.appendChild(canvas);
+    canvas.id = 'canvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+
+    const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSans-Medium.ttf');
+    const notoTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(notoData);
+    const notoFont = new canvasKit.Font(notoTypeFace, 50);
+
+    const notoFontBlock: FontBlock = {
+        length: 4,
+        typeface: notoTypeFace,
+        size: 50,
+        fakeBold: false,
+        fakeItalic: false,
+    }
+    // returns a GlyphRun
+    const textShapeLines = canvasKit.ParagraphBuilder.ShapeText('test', [notoFontBlock])
+    const textRun = textShapeLines[0].runs[0];
+
+    const fontPaint = new canvasKit.Paint();
+    fontPaint.setStyle(canvasKit.PaintStyle.Fill);
+    fontPaint.setColor(canvasKit.BLACK);
+    fontPaint.setAntiAlias(true);
+
+    const draw = (canvas) => {
+        surface.requestAnimationFrame(draw);
+        canvas.clear(canvasKit.WHITE);
+
+        canvas.drawGlyphs(textRun.glyphs, textRun.positions, 0, 0, notoFont, fontPaint);
+    }
+    surface.requestAnimationFrame(draw);
+}
 const drawMaskedText = async() => {
     const canvasKit = await loadCanvasKit() as any;
     const canvas = document.createElement('canvas');
@@ -275,6 +316,40 @@ const drawText = async() => {
         canvas.restore();
     };
     surface.requestAnimationFrame(draw);
+}
+
+/**
+ * Draw text using drawTextBlob method. Does not support kerning or ligatures.
+ */
+const drawTextBlob = async() => {
+    const canvasKit = await loadCanvasKit() as any;
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 600;
+    document.body.appendChild(canvas);
+    canvas.id = 'canvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+
+    const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoNaskhArabic-Medium.ttf')
+    const str = 'البطاطس بنية اللون';
+
+    const notoTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(notoData);
+    const notoFont = new canvasKit.Font(notoTypeFace, 50);
+    const textBlob = canvasKit.TextBlob.MakeFromText(str, notoFont);
+
+    const fontPaint = new canvasKit.Paint();
+    fontPaint.setStyle(canvasKit.PaintStyle.Fill);
+    fontPaint.setColor(canvasKit.BLACK);
+    fontPaint.setAntiAlias(true);
+
+    const draw = (canvas) => {
+        surface.requestAnimationFrame(draw);
+        canvas.clear(canvasKit.WHITE);
+
+        canvas.drawTextBlob(textBlob, 0, 100, fontPaint);
+    };
+    surface.requestAnimationFrame(draw);
+
 }
 
 const drawParagraphV2 = async() => {
@@ -446,9 +521,9 @@ const drawDifferentFontSizes = async() => {
 }
 
 /**
- * Draw text using drawTextBlob method. Does not support kerning or ligatures.
+ * Simple dynamic style example based on the text_1 asset from our sap_2023:media_3 scene design
  */
-const drawTextBlob = async() => {
+const drawDynamicStyle = async() => {
     const canvasKit = await loadCanvasKit() as any;
     const canvas = document.createElement('canvas');
     canvas.width = 600;
@@ -457,65 +532,112 @@ const drawTextBlob = async() => {
     canvas.id = 'canvas';
     const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
 
-    const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoNaskhArabic-Medium.ttf')
-    const str = 'البطاطس بنية اللون';
+    const lightFontData = await loadFont('https://storage.googleapis.com/lumen5-site-css/72-Light.ttf');
+    const boldFontData = await loadFont('https://storage.googleapis.com/lumen5-site-css/72-Bold.ttf');
 
-    const notoTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(notoData);
-    const notoFont = new canvasKit.Font(notoTypeFace, 50);
-    const textBlob = canvasKit.TextBlob.MakeFromText(str, notoFont);
+    // specifying fontWeight doesn't seem to work
+    const typefaceFontProvider = canvasKit.TypefaceFontProvider.Make();
+    typefaceFontProvider.registerFont(lightFontData, '72-light');
+    typefaceFontProvider.registerFont(boldFontData, '72-bold');
+    console.log('typefaceFontProvider', typefaceFontProvider);
 
-    const fontPaint = new canvasKit.Paint();
-    fontPaint.setStyle(canvasKit.PaintStyle.Fill);
-    fontPaint.setColor(canvasKit.BLACK);
-    fontPaint.setAntiAlias(true);
+    const lightStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.BLACK,
+            fontFamilies: ['72-light'],
+            fontSize: 50,
+        }
+    });
+    const boldStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.BLACK,
+            fontFamilies: ['72-bold'],
+            fontSize: 50,
+        }
+    });
 
-    const draw = (canvas) => {
-        surface.requestAnimationFrame(draw);
-        canvas.clear(canvasKit.WHITE);
+    // NOTE: we can't re-use the same paragraph builder for multiple paragraphs because the builder clears its internal
+    // state when we call reset() and we can't just set the text
+    const getParagraph = (text, canvasKit, style, fontProvider) => {
+        const builder = canvasKit.ParagraphBuilder.MakeFromFontProvider(style, fontProvider);
+        builder.addText(text);
+        const paragraph = builder.build();
+        const layoutWidth = 600;
+        paragraph.layout(layoutWidth);
 
-        canvas.drawTextBlob(textBlob, 0, 100, fontPaint);
-    };
-    surface.requestAnimationFrame(draw);
+        const width = paragraph.getMaxIntrinsicWidth();
+        const height = paragraph.getHeight();
 
-}
-
-/**
- * Draw text using drawGlyphs method. Does not support any kerning or ligatures.
- */
-const drawGlyphs = async() => {
-    const canvasKit = await loadCanvasKit() as any;
-    const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = 900;
-    document.body.appendChild(canvas);
-    canvas.id = 'canvas';
-    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
-
-    const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSans-Medium.ttf');
-    const notoTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(notoData);
-    const notoFont = new canvasKit.Font(notoTypeFace, 50);
-
-    const notoFontBlock: FontBlock = {
-        length: 4,
-        typeface: notoTypeFace,
-        size: 50,
-        fakeBold: false,
-        fakeItalic: false,
+        return {
+            paragraph,
+            width,
+            height
+        }
     }
-    // returns a GlyphRun
-    const textShapeLines = canvasKit.ParagraphBuilder.ShapeText('test', [notoFontBlock])
-    const textRun = textShapeLines[0].runs[0];
 
-    const fontPaint = new canvasKit.Paint();
-    fontPaint.setStyle(canvasKit.PaintStyle.Fill);
-    fontPaint.setColor(canvasKit.BLACK);
-    fontPaint.setAntiAlias(true);
+    const lightArray = [
+        'Three steps to',
+        'Profitable and',
+    ];
+    const boldArray = [
+        'Sustainable Energy',
+        'Management',
+    ]
+
+    // NOTE: we're cheating here by drawing individual lines. In production, we'll have to draw words since each word
+    // could use a different font style
+    const lightMetrics = lightArray.map(str => getParagraph(str, canvasKit, lightStyle, typefaceFontProvider));
+    const boldMetrics = boldArray.map(str => getParagraph(str, canvasKit, boldStyle, typefaceFontProvider));
+
+    const maskArray = [0.75, 0.5, 0.25, 0.0].reverse();
+    const xPosArray = [0, 10, 20, 30];
+    const maskPaint = new canvasKit.Paint();
+    maskPaint.setColor(canvasKit.BLACK);
+    maskPaint.setStyle(canvasKit.PaintStyle.Fill);
+
+    // let lastCurrent = performance.now();
+    // console.log('start', lastCurrent);
 
     const draw = (canvas) => {
-        surface.requestAnimationFrame(draw);
+        // surface.requestAnimationFrame(draw);
         canvas.clear(canvasKit.WHITE);
 
-        canvas.drawGlyphs(textRun.glyphs, textRun.positions, 0, 0, notoFont, fontPaint);
+        let xOffset = 0;
+        let yOffset = 0;
+        lightMetrics.forEach(({paragraph, width, height}, index) => {
+            canvas.drawParagraph(paragraph, xOffset + xPosArray[index], yOffset + 10);
+            yOffset += height;
+        });
+        boldMetrics.forEach(({paragraph, width, height}, index) => {
+            canvas.drawParagraph(paragraph, xOffset + xPosArray[index + 2], yOffset + 10);
+            yOffset += height;
+        });
+
+        yOffset = 0;
+
+        // NOTE: surprised to see that we can't change the color of a paint object after it's been used once.
+        maskPaint.setBlendMode(canvasKit.BlendMode.Screen);
+        lightMetrics.forEach(({paragraph, width, height}, index) => {
+            const maskPath = new canvasKit.Path();
+            const color = canvasKit.Color4f(maskArray[index], maskArray[index], maskArray[index]);
+            maskPaint.setColor(color);
+            maskPath.addRect(canvasKit.XYWHRect(xOffset + xPosArray[index], yOffset + 10, width, height));
+            canvas.drawPath(maskPath, maskPaint);
+            maskPath.delete();
+            yOffset += height;
+        });
+        boldMetrics.forEach(({paragraph, width, height}, index) => {
+            const maskPath = new canvasKit.Path();
+            const color = canvasKit.Color4f(maskArray[index + 2], maskArray[index + 2], maskArray[index + 2]);
+            maskPaint.setColor(color);
+            maskPath.addRect(canvasKit.XYWHRect(xOffset + xPosArray[index + 2], yOffset + 10, width, height));
+            canvas.drawPath(maskPath, maskPaint);
+            yOffset += height;
+            maskPath.delete();
+        });
+
+        // const current = performance.now();
+        // lastCurrent = current;
     }
     surface.requestAnimationFrame(draw);
 }
@@ -529,3 +651,4 @@ const drawGlyphs = async() => {
 // drawGlyphs();
 // drawParagraphV2();
 // drawDifferentFontSizes();
+drawDynamicStyle();
