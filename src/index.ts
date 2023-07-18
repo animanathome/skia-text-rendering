@@ -1,4 +1,4 @@
-import type {CanvasKit} from "canvaskit-wasm";
+import type {CanvasKit, FontBlock} from "canvaskit-wasm";
 import {Font, Paint, TypefaceFactory, TypefaceFontProvider} from "canvaskit-wasm";
 import {getArrayMetrics, getParagraph, textMetrics} from "./utils";
 import {text} from "./text";
@@ -204,7 +204,10 @@ const drawMaskedText = async() => {
     surface.requestAnimationFrame(draw);
 };
 
-const drawAnimatedText = async() => {
+/**
+ * Use drawText method to draw text on canvas. Does not support kerning or ligatures.
+ */
+const drawText = async() => {
     const canvasKit = await loadCanvasKit() as any;
     const canvas = document.createElement('canvas');
     canvas.width = 600;
@@ -223,6 +226,7 @@ const drawAnimatedText = async() => {
 
     const notoTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(notoData);
     const notoFont = new canvasKit.Font(notoTypeFace, 50);
+    const textBlob = canvasKit.TextBlob.MakeFromText(strArray[0], notoFont);
 
     const fontPaint = new canvasKit.Paint();
     fontPaint.setStyle(canvasKit.PaintStyle.Fill);
@@ -258,6 +262,7 @@ const drawAnimatedText = async() => {
             // does not support kerning
             // does not support different reading direction (LTR vs RTL)
             canvas.drawText(strArray[i], arrayMetrics[i].xOffset, 100, fontPaint, notoFont);
+            // canvas.drawTextBlob(textBlob, arrayMetrics[i].xOffset, 100, fontPaint);
 
             maskPaint.setBlendMode(canvasKit.BlendMode.Modulate);
 
@@ -440,10 +445,87 @@ const drawDifferentFontSizes = async() => {
     surface.requestAnimationFrame(draw);
 }
 
+/**
+ * Draw text using drawTextBlob method. Does not support kerning or ligatures.
+ */
+const drawTextBlob = async() => {
+    const canvasKit = await loadCanvasKit() as any;
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 600;
+    document.body.appendChild(canvas);
+    canvas.id = 'canvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+
+    const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoNaskhArabic-Medium.ttf')
+    const str = 'البطاطس بنية اللون';
+
+    const notoTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(notoData);
+    const notoFont = new canvasKit.Font(notoTypeFace, 50);
+    const textBlob = canvasKit.TextBlob.MakeFromText(str, notoFont);
+
+    const fontPaint = new canvasKit.Paint();
+    fontPaint.setStyle(canvasKit.PaintStyle.Fill);
+    fontPaint.setColor(canvasKit.BLACK);
+    fontPaint.setAntiAlias(true);
+
+    const draw = (canvas) => {
+        surface.requestAnimationFrame(draw);
+        canvas.clear(canvasKit.WHITE);
+
+        canvas.drawTextBlob(textBlob, 0, 100, fontPaint);
+    };
+    surface.requestAnimationFrame(draw);
+
+}
+
+/**
+ * Draw text using drawGlyphs method. Does not support any kerning or ligatures.
+ */
+const drawGlyphs = async() => {
+    const canvasKit = await loadCanvasKit() as any;
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 900;
+    document.body.appendChild(canvas);
+    canvas.id = 'canvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+
+    const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSans-Medium.ttf');
+    const notoTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(notoData);
+    const notoFont = new canvasKit.Font(notoTypeFace, 50);
+
+    const notoFontBlock: FontBlock = {
+        length: 4,
+        typeface: notoTypeFace,
+        size: 50,
+        fakeBold: false,
+        fakeItalic: false,
+    }
+    // returns a GlyphRun
+    const textShapeLines = canvasKit.ParagraphBuilder.ShapeText('test', [notoFontBlock])
+    const textRun = textShapeLines[0].runs[0];
+
+    const fontPaint = new canvasKit.Paint();
+    fontPaint.setStyle(canvasKit.PaintStyle.Fill);
+    fontPaint.setColor(canvasKit.BLACK);
+    fontPaint.setAntiAlias(true);
+
+    const draw = (canvas) => {
+        surface.requestAnimationFrame(draw);
+        canvas.clear(canvasKit.WHITE);
+
+        canvas.drawGlyphs(textRun.glyphs, textRun.positions, 0, 0, notoFont, fontPaint);
+    }
+    surface.requestAnimationFrame(draw);
+}
+
 // drawGradient()
 // drawRomanTextAndSelectObject();
 // drawBengaliTextAndSelectWord();
 // drawMaskedText();
-// drawAnimatedText();
+// drawText();
+// drawTextBlob();
+// drawGlyphs();
 // drawParagraphV2();
-drawDifferentFontSizes();
+// drawDifferentFontSizes();
