@@ -4,13 +4,17 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "serve": "webpack build --config webpack.config.js"
+    "web-build": "webpack build --config webpack.web.config.js",
+    "node-build": "webpack build --config webpack.node.config.js",
+    "node-run": "node scripts/main.js",
+    "node": "npm run node-build && npm run node-run"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "canvaskit-wasm": "^0.38.2"
+    "canvaskit-wasm": "^0.38.2",
+    "node-fetch": "^3.3.1"
   },
   "devDependencies": {
     "copy-webpack-plugin": "^11.0.0",

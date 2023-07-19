@@ -846,7 +846,6 @@ const drawDynamicHighlight = async() => {
         canvas.restoreToCount(normalText);
     }
     surface.requestAnimationFrame(draw);
-
 }
 
 // drawGradient()
