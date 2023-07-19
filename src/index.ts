@@ -654,6 +654,8 @@ const drawDynamicHighlight = async() => {
     const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
 
     const fontData = await loadFont('https://storage.googleapis.com/lumen5-site-css/Poppins-Bold.ttf');
+    // const fontData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSansBengali-Regular.ttf');
+    // const fontData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoNaskhArabic-Medium.ttf');
     const fontTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(fontData);
     const typefaceFontProvider = canvasKit.TypefaceFontProvider.Make();
     // we register the font with the name that we'll use in the fontFamilies array
@@ -723,6 +725,9 @@ const drawDynamicHighlight = async() => {
 
     const str = 'Animated highlights test. We can highlight everything';
     const strArray = str.split(' ');
+    // const str = 'অ্যানিমেটেড হাইলাইট পরীক্ষা. আমরা সবকিছু তুলে ধরতে পারি';
+    // const str = 'اختبار الملامح المتحركة. يمكننا تسليط الضوء على كل شيء'
+    // const strArray = str.split(' ').reverse();
     const strMetrics = strArray.map(str => getParagraph(str, canvasKit, style, typefaceFontProvider));
 
     const highlightMetrics = strArray.map(str => getParagraph(str, canvasKit, highlightStyle, typefaceFontProvider));
