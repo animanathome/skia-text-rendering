@@ -1,9 +1,8 @@
-import type {CanvasKit, FontBlock, StrutStyle} from "canvaskit-wasm";
-import {Font, FontCollectionFactory, Paint, TypefaceFactory, TypefaceFontProvider} from "canvaskit-wasm";
+import type {CanvasKit, FontBlock} from "canvaskit-wasm";
 import {getArrayMetrics, getParagraph, glyphHeights, textMetrics} from "./utils";
 import {text} from "./text";
+import {interpolate, ProgressTimeline, Timeline} from "./timeline";
 
-// TODO: what are the different versions?
 const CanvasKitInit = require('canvaskit-wasm/bin/profiling/canvaskit.js')
 
 let canvasKit:CanvasKit | null = null;
@@ -649,7 +648,7 @@ const drawDynamicHighlight = async() => {
     const canvasKit = await loadCanvasKit() as any;
     const canvas = document.createElement('canvas');
     canvas.width = 600;
-    canvas.height = 600;
+    canvas.height = 150;
     document.body.appendChild(canvas);
     canvas.id = 'canvas';
     const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
@@ -661,6 +660,7 @@ const drawDynamicHighlight = async() => {
     typefaceFontProvider.registerFont(fontData, 'Poppins-Bold');
 
     const font = new canvasKit.Font(fontTypeFace, 36);
+    const {ascent} = font.getMetrics();
 
     const textHeightBehavior = canvasKit.TextHeightBehavior.DisableAll;
     const heightMultiplier = 0.5;
@@ -710,6 +710,7 @@ const drawDynamicHighlight = async() => {
 
         // get the top and height of the text
         const {top, height} = textMetrics(text, font, null);
+        // console.log('text:', text, 'top:', top, 'height:', height, 'lineHeight:', lineHeight);
 
         return {
             paragraph,
@@ -726,7 +727,7 @@ const drawDynamicHighlight = async() => {
 
     const highlightMetrics = strArray.map(str => getParagraph(str, canvasKit, highlightStyle, typefaceFontProvider));
     const space = 10;
-    const lineHeightMultiplier = 0.75;
+    const lineHeightMultiplier = 0.8;
 
     const maskPaint = new canvasKit.Paint();
     maskPaint.setColor(canvasKit.BLACK);
@@ -736,16 +737,28 @@ const drawDynamicHighlight = async() => {
     graphicPaint.setColor(canvasKit.BLUE);
     graphicPaint.setStyle(canvasKit.PaintStyle.Fill);
 
+    // Timelines
+    const timeline = new Timeline();
+    const yProgressTimeline = new ProgressTimeline({start: 0, end: 1000});
+    const highlightProgressTimeline = new ProgressTimeline({start: 1000, end: 3000});
+    const yPosArray = [-100, 0];
+
     const draw = (canvas) => {
+        // Animation
+        const currentTime = timeline.currentTime;
+        const maskProgress = highlightProgressTimeline.value(currentTime);
+        const yProgress = yProgressTimeline.value(currentTime);
+        const yValue = interpolate(yPosArray[0], yPosArray[1], yProgress);
+
         surface.requestAnimationFrame(draw);
         canvas.clear(canvasKit.TRANSPARENT);
 
         let xOffset = 10;
-        let yOffset = 10;
+        let yOffset = 0;
 
         // draw normal text
         strMetrics.forEach(({paragraph, top, width, height, lineHeight}, index) => {
-            canvas.drawParagraph(paragraph, xOffset, yOffset + 10);
+            canvas.drawParagraph(paragraph, xOffset, yOffset + yValue);
 
             xOffset += width + space;
             if (strMetrics[index + 1] && xOffset + strMetrics[index + 1].width > 600) {
@@ -756,13 +769,13 @@ const drawDynamicHighlight = async() => {
 
         // mask normal text
         xOffset = 10;
-        yOffset = 10;
+        yOffset = 0;
         maskPaint.setBlendMode(canvasKit.BlendMode.DstOut);
         highlightMetrics.forEach(({paragraph, width, top, height, lineHeight}, index) => {
             if (index === 0 || index === 5) {
                 const maskPath = new canvasKit.Path();
-                const startRectWidth = width * 0.6;
-                maskPath.addRect(canvasKit.XYWHRect(xOffset, yOffset - top - 8, startRectWidth, height));
+                const startRectWidth = width * maskProgress;
+                maskPath.addRect(canvasKit.XYWHRect(xOffset, yOffset + (Math.abs(ascent) + top), startRectWidth, height));
                 canvas.drawPath(maskPath, maskPaint);
                 maskPath.delete();
             }
@@ -781,12 +794,12 @@ const drawDynamicHighlight = async() => {
         canvas.clear(canvasKit.TRANSPARENT);
 
         xOffset = 10;
-        yOffset = 10;
+        yOffset = 0;
         highlightMetrics.forEach(({paragraph, width, top, height, lineHeight}, index) => {
             if (index === 0 || index === 5) {
                 const graphicPath = new canvasKit.Path();
-                const startRectWidth = width * 0.6;
-                graphicPath.addRect(canvasKit.XYWHRect(xOffset, yOffset - top - 8, startRectWidth, height));
+                const startRectWidth = width * maskProgress;
+                graphicPath.addRect(canvasKit.XYWHRect(xOffset, yOffset + (Math.abs(ascent) + top), startRectWidth, height));
                 canvas.drawPath(graphicPath, graphicPaint);
                 graphicPath.delete();
             }
@@ -805,10 +818,10 @@ const drawDynamicHighlight = async() => {
 
         // draw highlighted text
         xOffset = 10;
-        yOffset = 10;
+        yOffset = 0;
         highlightMetrics.forEach(({paragraph, width, lineHeight}, index) => {
             if (index === 0 || index === 5) {
-                canvas.drawParagraph(paragraph, xOffset, yOffset + 10);
+                canvas.drawParagraph(paragraph, xOffset, yOffset);
             }
 
             xOffset += width + space;
@@ -820,14 +833,14 @@ const drawDynamicHighlight = async() => {
 
         // mask highlighted text
         xOffset = 10;
-        yOffset = 10;
+        yOffset = 0;
         maskPaint.setBlendMode(canvasKit.BlendMode.DstOut);
         highlightMetrics.forEach(({paragraph, width, top, height, lineHeight}, index) => {
             if (index === 0 || index === 5) {
                 const maskPath = new canvasKit.Path();
-                const startRectWidth = width * 0.6;
+                const startRectWidth = width * maskProgress;
                 const endRectWidth = width - startRectWidth;
-                maskPath.addRect(canvasKit.XYWHRect(xOffset + startRectWidth, yOffset - top - 8, endRectWidth, height));
+                maskPath.addRect(canvasKit.XYWHRect(xOffset + startRectWidth, yOffset + (Math.abs(ascent) + top), endRectWidth, height));
                 canvas.drawPath(maskPath, maskPaint);
                 maskPath.delete();
             }
