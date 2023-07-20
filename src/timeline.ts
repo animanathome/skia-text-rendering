@@ -9,18 +9,23 @@ export class Timeline {
 }
 
 export class ProgressTimeline {
-    start = 0
-    end = 100
-    constructor(options: {start: number, end: number}) {
+    start = 0;
+    end = 100;
+    loop = false;
+    constructor(options: {start: number, end: number, loop?: boolean}) {
         this.start = options.start;
         this.end = options.end;
+        this.loop = options.loop || false;
     }
     value(time) {
         if (time < this.start) {
             return 0
         }
-        if (time > this.end) {
+        if (!this.loop && time > this.end) {
             return 1;
+        }
+        if (this.loop) {
+            time = time % (this.end - this.start);
         }
         return (time - this.start) / (this.end - this.start);
     }

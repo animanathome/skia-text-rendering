@@ -1,7 +1,10 @@
+import Stats from 'stats.js';
 import type {CanvasKit, FontBlock} from "canvaskit-wasm";
 import {getArrayMetrics, getParagraph, glyphHeights, textMetrics} from "./utils";
 import {text} from "./text";
 import {interpolate, ProgressTimeline, Timeline} from "./timeline";
+
+import LOTTIE from '../resources/lottie_anim.json';
 
 const CanvasKitInit = require('canvaskit-wasm/bin/profiling/canvaskit.js')
 
@@ -866,6 +869,58 @@ const drawDynamicHighlight = async() => {
     surface.requestAnimationFrame(draw);
 }
 
+const drawLottie = async() => {
+    const stats = new Stats();
+    stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+    document.body.appendChild( stats.dom );
+
+    const canvasKit = await loadCanvasKit() as any;
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 600;
+    document.body.appendChild(canvas);
+    canvas.id = 'canvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+
+    const lottieAsString = JSON.stringify(LOTTIE);
+    const skottieAnimation = canvasKit.MakeAnimation(lottieAsString);
+    const frameCount = skottieAnimation.duration() * skottieAnimation.fps();
+
+    console.log('duration', skottieAnimation.duration());
+    console.log('size', skottieAnimation.size());
+    console.log('version', skottieAnimation.version());
+    console.log('frameCount', frameCount);
+
+    const graphicPaint = new canvasKit.Paint();
+    graphicPaint.setColor(canvasKit.TRANSPARENT);
+    graphicPaint.setStyle(canvasKit.PaintStyle.Fill);
+
+    skottieAnimation.seekFrame(1);
+
+    const timeline = new Timeline();
+    const progressTimeline = new ProgressTimeline({
+        start: 0, end: skottieAnimation.duration() * 1000, loop: true});
+    const draw = (canvas) => {
+        stats.begin();
+
+        const currentTime = timeline.currentTime;
+        const progress = progressTimeline.value(currentTime);
+        const frame = progress * frameCount;
+
+        const graphicPath = new canvasKit.Path();
+        graphicPath.addRect(canvasKit.XYWHRect(0, 0, 512, 512));
+        canvas.drawPath(graphicPath, graphicPaint);
+
+        skottieAnimation.seekFrame(frame);
+        skottieAnimation.render(canvas);
+
+        stats.end();
+
+        surface.requestAnimationFrame(draw);
+    }
+    surface.requestAnimationFrame(draw);
+}
+
 // drawGradient()
 // drawRomanTextAndSelectObject();
 // drawBengaliTextAndSelectWord();
@@ -877,3 +932,4 @@ const drawDynamicHighlight = async() => {
 // drawDifferentFontSizes();
 // drawDynamicStyle();
 drawDynamicHighlight();
+// drawLottie()
