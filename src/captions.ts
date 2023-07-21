@@ -1,9 +1,7 @@
 import {Transcript} from "./transcript";
-import {CanvasKit, Font, Path, Paint, ParagraphStyle, TypefaceFontProvider, Canvas} from "canvaskit-wasm";
+import {CanvasKit, Font, ParagraphStyle, TypefaceFontProvider, Canvas} from "canvaskit-wasm";
 import {loadCanvasKit} from "./canvasKit";
 import {textMetrics} from "./utils";
-import {ProgressTimeline} from "./timeline";
-import * as process from "process";
 
 const getParagraph = (text, canvasKit, style, fontProvider, font) => {
     const builder = canvasKit.ParagraphBuilder.MakeFromFontProvider(style, fontProvider);

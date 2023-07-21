@@ -1,5 +1,5 @@
 import Stats from 'stats.js';
-import type {CanvasKit, FontBlock} from "canvaskit-wasm";
+import type {FontBlock} from "canvaskit-wasm";
 import {
     getArrayMetrics,
     getParagraph, loadAudio,
@@ -9,7 +9,7 @@ import {
 import {text} from "./text";
 import {interpolate, ProgressTimeline, Timeline} from "./timeline";
 
-import {Application, VideoResource, Sprite, Texture} from "pixi.js";
+import {Application, Sprite, Texture} from "pixi.js";
 
 import LOTTIE from '../resources/lottie_anim.json';
 import TRANSCRIPT from '../resources/transcript.json';
@@ -1076,7 +1076,7 @@ const transcriptToAnimation = async() => {
     pixiSprite.y = 150;
     app.stage.addChild(pixiSprite);
 
-    // create timeline
+    // create a looping timeline
     const timeline = new Timeline();
     const progressTimeline = new ProgressTimeline({
         start: 0,
@@ -1102,7 +1102,6 @@ const transcriptToAnimation = async() => {
         const time = progress * progressTimeline.end;
 
         captions.currentTime = time;
-        // captions.currentTime = 2000;
 
         surface.requestAnimationFrame(skiaDraw);
         pixiTexture.update();
