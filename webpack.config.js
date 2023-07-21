@@ -42,6 +42,7 @@ module.exports = {
       new CopyWebpackPlugin({
         patterns: [
             {from: './node_modules/canvaskit-wasm/bin/profiling/canvaskit.wasm'},
+            {from: './resources/*'},
         ]
       }),
       new HtmlWebpackPlugin({

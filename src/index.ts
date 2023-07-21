@@ -1,32 +1,21 @@
 import Stats from 'stats.js';
 import type {CanvasKit, FontBlock} from "canvaskit-wasm";
-import {getArrayMetrics, getParagraph, glyphHeights, textMetrics} from "./utils";
+import {
+    getArrayMetrics,
+    getParagraph, loadAudio,
+    simplifyTranscript,
+    textMetrics,
+} from "./utils";
 import {text} from "./text";
 import {interpolate, ProgressTimeline, Timeline} from "./timeline";
 
-import {Application, Sprite, Texture} from "pixi.js";
+import {Application, VideoResource, Sprite, Texture} from "pixi.js";
 
 import LOTTIE from '../resources/lottie_anim.json';
-
-const CanvasKitInit = require('canvaskit-wasm/bin/profiling/canvaskit.js')
-
-let canvasKit:CanvasKit | null = null;
-const loadCanvasKit = async() => {
-    if (canvasKit) {
-        return canvasKit;
-    }
-    await new Promise((resolve, reject) => {
-        CanvasKitInit()
-            .then((CanvasKit) => {
-                canvasKit = CanvasKit;
-                resolve(canvasKit);
-            })
-            .catch(e => {
-                reject(e);
-            })
-    });
-    return canvasKit;
-}
+import TRANSCRIPT from '../resources/transcript.json';
+import {CaptionGenerator} from "./captions";
+import {Transcript} from "./transcript";
+import {loadCanvasKit} from "./canvasKit";
 
 const loadFont = async(fontUrl) => {
     const buffer = await fetch(fontUrl);
@@ -1005,6 +994,139 @@ const drawSkiaInPixi = async() => {
     app.ticker.add(pixiDraw);
 }
 
+
+const transcriptToAnimation = async() => {
+    const stats = new Stats();
+    stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+    stats.dom.style.position = 'absolute';
+    stats.dom.style.top = '10px';
+    stats.dom.style.left = '10px';
+    document.body.appendChild( stats.dom );
+
+    const click = document.createElement('div');
+    click.innerText = 'click on screen to play';
+    click.style.position = 'absolute';
+    click.style.top = '10px';
+    click.style.left = '384px';
+    document.body.appendChild(click);
+
+    //  ----------------------------------------------------------
+    // PIXI setup
+    const app = new Application({
+        backgroundColor: 0xffffff,
+        antialias: true,
+        autoStart: false,
+        width: 512 * 16/9,
+        height: 512,
+    });
+    (app.view as HTMLCanvasElement).id = 'pixiCanvas';
+    // document.body.appendChild((app as any).view);
+
+    const audio = await loadAudio('../resources/transcript_audio.m4a');
+
+    const videoSprite = Sprite.from('../resources/container_ship_720.mp4');
+    videoSprite.tint = 0xD6D6D6;
+    (videoSprite.texture.baseTexture.resource as any).source.muted = true;
+    (videoSprite.texture.baseTexture.resource as any).source.loop = true;
+    app.stage.addChild(videoSprite);
+
+    //  ----------------------------------------------------------
+    // SKIA setup
+    const canvasKit = await loadCanvasKit() as any;
+
+    // load and register font
+    const fontData = await loadFont('https://storage.googleapis.com/lumen5-site-css/Poppins-Bold.ttf');
+    const fontTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(fontData);
+    const typefaceFontProvider = canvasKit.TypefaceFontProvider.Make();
+    typefaceFontProvider.registerFont(fontData, 'Poppins-Bold');
+    const font = new canvasKit.Font(fontTypeFace, 48);
+
+    // create canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 384;
+    document.body.appendChild(canvas);
+    canvas.id = 'skiaCanvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+    document.body.removeChild(canvas);
+    const skiaCanvas = surface.getCanvas();
+
+    // create caption generator
+    const transcript = new Transcript({...simplifyTranscript(TRANSCRIPT)});
+    const normalStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.WHITE,
+            fontFamilies: ['Poppins-Bold'],
+            fontSize: 42,
+        }
+    });
+    const captions = new CaptionGenerator({
+        transcript,
+        normalStyle,
+        typefaceFontProvider,
+        normalFont: font,
+        startTime: 0,
+        endTime: transcript.endTime,
+        chunkDuration: 2600,
+        width: 350,
+    });
+    const pixiTexture = Texture.from(canvas);
+    const pixiSprite = new Sprite(pixiTexture);
+    pixiSprite.x = 50;
+    pixiSprite.y = 150;
+    app.stage.addChild(pixiSprite);
+
+    // create timeline
+    const timeline = new Timeline();
+    const progressTimeline = new ProgressTimeline({
+        start: 0,
+        end: transcript.duration,
+        loop: true,
+        onLoopCallBack: () => {
+            // restart audio when our timeline loops
+            audio.currentTime = 0.0;
+        }
+    });
+
+    //  ----------------------------------------------------------
+    // create drawing methods
+    const skiaDraw = () => {
+        captions.draw(skiaCanvas);
+    }
+
+    const pixiDraw = () => {
+        stats.begin();
+
+        const currentTime = timeline.currentTime;
+        const progress = progressTimeline.value(currentTime);
+        const time = progress * progressTimeline.end;
+
+        captions.currentTime = time;
+        // captions.currentTime = 2000;
+
+        surface.requestAnimationFrame(skiaDraw);
+        pixiTexture.update();
+        stats.end();
+    }
+
+    //  ----------------------------------------------------------
+    // start playback on click
+    document.addEventListener('click', () => {
+        app.ticker.add(pixiDraw);
+        app.ticker.start();
+
+        click.style.display = 'none';
+
+        if (audio.paused) {
+            audio.loop = true;
+            audio.play();
+            timeline.reset();
+        }
+        document.body.appendChild((app as any).view);
+    })
+    audio.pause();
+}
+
 // drawGradient()
 // drawRomanTextAndSelectObject();
 // drawBengaliTextAndSelectWord();
@@ -1017,4 +1139,6 @@ const drawSkiaInPixi = async() => {
 // drawDynamicStyle();
 // drawDynamicHighlight();
 // drawLottie()
-drawSkiaInPixi();
+// drawSkiaInPixi();
+
+transcriptToAnimation();

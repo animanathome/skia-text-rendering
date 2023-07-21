@@ -61,3 +61,46 @@ export const glyphHeights = (bounds) => {
         height: Math.abs(minTop) + maxBottom
     };
 }
+
+/**
+ * HARDCODED method which converts the project transcript into timeline parameters
+ */
+export const simplifyTranscript = (TRANSCRIPT) => {
+    // scene group id
+    const root = TRANSCRIPT['72f7ad49-c114-cf11-a619-14fa385d020f'];
+    const language = root['language'];
+    const textDirection = root.editorState.root.direction;
+    const paragraph = root.editorState.root.children[0];
+    const words = paragraph.children
+        .map(word => {
+            return {
+                text: word.text,
+                startTime: word.startTime,
+                endTime: word.endTime,
+            }
+        })
+        .filter(word => word.text !== ' ');
+    return {
+        language,
+        textDirection,
+        words,
+    }
+}
+
+export const loadAudio = async(url): Promise<HTMLAudioElement> => {
+    const audio = document.createElement('audio');
+    audio.src = '../resources/transcript_audio.m4a';
+    audio.defaultMuted = true;
+    // audio.muted = true;
+    audio.autoplay = true;
+    // audio.volume = 0;
+    document.body.appendChild(audio);
+
+    return new Promise((resolve, reject) => {
+        audio.addEventListener('canplaythrough', () => {
+            console.log('audio loaded');
+            resolve(audio);
+        });
+    })
+}
+
