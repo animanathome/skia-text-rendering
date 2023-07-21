@@ -994,8 +994,11 @@ const drawSkiaInPixi = async() => {
     app.ticker.add(pixiDraw);
 }
 
-
+/**
+ * In the example we mock up a simple transcript driven caption animation.
+ */
 const transcriptToAnimation = async() => {
+    // to see how long it takes to render a frame
     const stats = new Stats();
     stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
     stats.dom.style.position = 'absolute';
@@ -1003,6 +1006,7 @@ const transcriptToAnimation = async() => {
     stats.dom.style.left = '10px';
     document.body.appendChild( stats.dom );
 
+    // instructions for the user
     const click = document.createElement('div');
     click.innerText = 'click on screen to play';
     click.style.position = 'absolute';
