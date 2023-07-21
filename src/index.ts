@@ -4,6 +4,8 @@ import {getArrayMetrics, getParagraph, glyphHeights, textMetrics} from "./utils"
 import {text} from "./text";
 import {interpolate, ProgressTimeline, Timeline} from "./timeline";
 
+import {Application, Sprite, Texture} from "pixi.js";
+
 import LOTTIE from '../resources/lottie_anim.json';
 
 const CanvasKitInit = require('canvaskit-wasm/bin/profiling/canvaskit.js')
@@ -869,6 +871,9 @@ const drawDynamicHighlight = async() => {
     surface.requestAnimationFrame(draw);
 }
 
+/**
+ * In this example we draw a lottie animation on a canvas.
+ */
 const drawLottie = async() => {
     const stats = new Stats();
     stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
@@ -886,10 +891,10 @@ const drawLottie = async() => {
     const skottieAnimation = canvasKit.MakeAnimation(lottieAsString);
     const frameCount = skottieAnimation.duration() * skottieAnimation.fps();
 
-    console.log('duration', skottieAnimation.duration());
-    console.log('size', skottieAnimation.size());
-    console.log('version', skottieAnimation.version());
-    console.log('frameCount', frameCount);
+    // console.log('duration', skottieAnimation.duration());
+    // console.log('size', skottieAnimation.size());
+    // console.log('version', skottieAnimation.version());
+    // console.log('frameCount', frameCount);
 
     const graphicPaint = new canvasKit.Paint();
     graphicPaint.setColor(canvasKit.TRANSPARENT);
@@ -921,6 +926,85 @@ const drawLottie = async() => {
     surface.requestAnimationFrame(draw);
 }
 
+/**
+ * In this example we will draw a lottie animation on a canvas and ask pixi to draw it.
+ * We do this to figure out how we could use skia within pixi.
+ */
+const drawSkiaInPixi = async() => {
+    const stats = new Stats();
+    stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+    document.body.appendChild( stats.dom );
+
+    const app = new Application({
+        backgroundColor: 0xffffff,
+        antialias: true,
+        autoStart: true,
+        width: 256,
+        height: 256,
+    });
+    (app.view as HTMLCanvasElement).id = 'pixiCanvas';
+    document.body.appendChild((app as any).view);
+
+    const canvasKit = await loadCanvasKit() as any;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    document.body.appendChild(canvas);
+    canvas.id = 'skiaCanvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+    // document.body.removeChild(canvas);
+    console.log('surface', surface);
+
+    // build skia lottie layer
+    const lottieAsString = JSON.stringify(LOTTIE);
+    const skottieAnimation = canvasKit.MakeAnimation(lottieAsString);
+    const frameCount = skottieAnimation.duration() * skottieAnimation.fps();
+
+    const graphicPaint = new canvasKit.Paint();
+    graphicPaint.setColor(canvasKit.TRANSPARENT);
+    graphicPaint.setStyle(canvasKit.PaintStyle.Fill);
+
+    // create timeline
+    const timeline = new Timeline();
+    const progressTimeline = new ProgressTimeline({
+        start: 0,
+        end: skottieAnimation.duration() * 1000,
+        loop: true
+    });
+
+    const skiaCanvas = surface.getCanvas();
+
+    // skia drawing method
+    const skiaDraw = () => {
+        const currentTime = timeline.currentTime;
+        const progress = progressTimeline.value(currentTime);
+        const frame = progress * frameCount;
+
+        const graphicPath = new canvasKit.Path();
+        graphicPath.addRect(canvasKit.XYWHRect(0, 0, 256, 256));
+        skiaCanvas.drawPath(graphicPath, graphicPaint);
+
+        skottieAnimation.seekFrame(frame);
+        skottieAnimation.render(skiaCanvas);
+    }
+
+    // build pixi scene
+    const pixiTexture = Texture.from(canvas);
+    const pixiSprite = new Sprite(pixiTexture);
+    app.stage.addChild(pixiSprite);
+
+    const pixiDraw = () => {
+        stats.begin();
+
+        pixiTexture.update();
+
+        surface.requestAnimationFrame(skiaDraw);
+
+        stats.end();
+    }
+    app.ticker.add(pixiDraw);
+}
+
 // drawGradient()
 // drawRomanTextAndSelectObject();
 // drawBengaliTextAndSelectWord();
@@ -931,5 +1015,6 @@ const drawLottie = async() => {
 // drawParagraphV2();
 // drawDifferentFontSizes();
 // drawDynamicStyle();
-drawDynamicHighlight();
+// drawDynamicHighlight();
 // drawLottie()
+drawSkiaInPixi();
