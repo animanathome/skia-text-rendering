@@ -1257,7 +1257,7 @@ const transcriptToAnimation2 = async() => {
 
     //  ----------------------------------------------------------
     // NOTE: this initial draw takes 40ms for layout and 40ms for flush.
-    // After that it takes about 85ms.
+    // After that it takes about 0.85ms to render each frame.
 
     const skiaDraw = () => {
         captions.draw(skiaCanvas);
