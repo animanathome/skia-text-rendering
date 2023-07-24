@@ -97,6 +97,9 @@ class Caption {
         }
         canvas.clear(this.canvasKit.TRANSPARENT);
 
+        // NOTE: In the link below we can see that the caption animates in from the top by both changing y and opacity
+        // https://www.notion.so/lumen5/Fancy-Captions-73d2c3b362204a699eef1fddd0f5b7eb?pvs=4#cb3b981151c04db5a7838632c5b4aca6
+
         const padding = {
             left: 3,
             right: 3,
@@ -140,8 +143,10 @@ class Caption {
                     canvas.drawParagraph(paragraph, xPosition[i], yPosition[i]);
                 }
             }
-
         }
+
+        // NOTE: we'll probably also want to gradually want to animate the effect. This will require the addition of a
+        // either a caption level or word level timeline (either way, we need to be able to map time to word level).
 
         // highlight - the currently active word
         if (this.parent.fancyStyle === 'highlight') {
@@ -307,6 +312,11 @@ export class CaptionGenerator {
         return this._currentTime;
     }
     set currentTime(time) {
+        // nothing to do if we're not within the time range
+        if (this.startTime > time || this.endTime < time) {
+            return;
+        }
+
         this._currentTime = time;
         const activeChunk = this.getActiveChunk(time);
         if (activeChunk === this._previousActiveChunk) {
