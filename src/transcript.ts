@@ -39,6 +39,10 @@ export class Transcript {
         return this._words.findIndex(word => word.startTime <= time && word.endTime >= time);
     }
 
+    getLastWord() {
+        return this._words[this._words.length - 1];
+    }
+
     getWordsForTimeRange(startTime: number, endTime: number) {
         return this._words.filter(word => word.startTime >= startTime && word.endTime <= endTime)
     }

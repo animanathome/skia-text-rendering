@@ -13,6 +13,7 @@ import {Application, Sprite, Texture} from "pixi.js";
 
 import LOTTIE from '../resources/lottie_anim.json';
 import TRANSCRIPT from '../resources/transcript.json';
+import CHRIS_TRANSCRIPT from '../resources/transcript_chris_talking.json';
 import {CaptionGenerator} from "./captions";
 import {Transcript} from "./transcript";
 import {loadCanvasKit} from "./canvasKit";
@@ -996,6 +997,7 @@ const drawSkiaInPixi = async() => {
 
 /**
  * In the example we mock up a simple transcript driven caption animation.
+ * Here we highlight the word that is being spoken.
  */
 const transcriptToAnimation = async() => {
     // to see how long it takes to render a frame
@@ -1066,13 +1068,14 @@ const transcriptToAnimation = async() => {
     });
     const captions = new CaptionGenerator({
         transcript,
-        normalStyle,
         typefaceFontProvider,
+        normalStyle,
         normalFont: font,
         startTime: 0,
         endTime: transcript.endTime,
         chunkDuration: 2600,
         width: 350,
+        fancyStyle: 'highlight',
     });
     const pixiTexture = Texture.from(canvas);
     const pixiSprite = new Sprite(pixiTexture);
@@ -1101,14 +1104,16 @@ const transcriptToAnimation = async() => {
     const pixiDraw = () => {
         stats.begin();
 
+        // update time
         const currentTime = timeline.currentTime;
         const progress = progressTimeline.value(currentTime);
         const time = progress * progressTimeline.end;
-
         captions.currentTime = time;
 
+        // draw changes
         surface.requestAnimationFrame(skiaDraw);
         pixiTexture.update();
+
         stats.end();
     }
 
@@ -1130,6 +1135,167 @@ const transcriptToAnimation = async() => {
     audio.pause();
 }
 
+/**
+ * In the example we mock up a simple transcript driven caption animation.
+ * Here we increase the visibility of the spoken words by reducing the opacity.
+ */
+const transcriptToAnimation2 = async() => {
+    // to see how long it takes to render a frame
+    const stats = new Stats();
+    stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+    stats.dom.style.position = 'absolute';
+    stats.dom.style.top = '10px';
+    stats.dom.style.left = '10px';
+    document.body.appendChild(stats.dom);
+
+    // instructions for the user
+    const click = document.createElement('div');
+    click.innerText = 'click on screen to play';
+    click.style.position = 'absolute';
+    click.style.top = '10px';
+    click.style.left = '384px';
+    document.body.appendChild(click);
+
+    //  ----------------------------------------------------------
+    // PIXI setup
+    const height = 512;
+    const width = 512 * 16/9;
+    const app = new Application({
+        backgroundColor: 0xffffff,
+        antialias: true,
+        autoStart: false,
+        width,
+        height,
+    });
+    (app.view as HTMLCanvasElement).id = 'pixiCanvas';
+
+    const videoSprite = Sprite.from('../resources/chris_talking_720.mp4');
+    videoSprite.tint = 0xD6D6D6;
+    videoSprite.scale.x = 0.85;
+    videoSprite.scale.y = 0.85;
+    const videoResource = videoSprite.texture.baseTexture.resource as any;
+    const video = videoResource.source as HTMLVideoElement
+    video.muted = true;
+    video.loop = true;
+    video.autoplay = false;
+    video.pause();
+    app.stage.addChild(videoSprite);
+
+    //  ----------------------------------------------------------
+    // SKIA setup
+    const canvasKit = await loadCanvasKit() as any;
+
+    // load and register font
+    const fontData = await loadFont('https://storage.googleapis.com/lumen5-site-css/Poppins-Bold.ttf');
+    const fontTypeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(fontData);
+    const typefaceFontProvider = canvasKit.TypefaceFontProvider.Make();
+    typefaceFontProvider.registerFont(fontData, 'Poppins-Bold');
+    const font = new canvasKit.Font(fontTypeFace, 48);
+
+    // create canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 384;
+    document.body.appendChild(canvas);
+    canvas.id = 'skiaCanvas';
+    const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
+    document.body.removeChild(canvas);
+    const skiaCanvas = surface.getCanvas();
+
+    // NOTES:
+    // - transcript vs lexicals what is the difference?
+    // - transcript isn't perfect. It's missing some words and the often adds periods to the middle of sentences
+    // - it also seems to have undefined entries in the transcript
+    const groupId = 'da5b2a03-ad73-a936-8b5f-f6b485834a48';
+    const transcript = new Transcript({...simplifyTranscript(CHRIS_TRANSCRIPT, groupId)});
+    console.log('word count', transcript.words.length)
+
+    const normalStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.Color(0, 0, 0, 0.125),
+            fontFamilies: ['Poppins-Bold'],
+            fontSize: 28,
+        },
+    });
+    const highlightStyle = new canvasKit.ParagraphStyle({
+        textStyle: {
+            color: canvasKit.Color(255.0, 255.0, 255.0, 1.0),
+            fontFamilies: ['Poppins-Bold'],
+            fontSize: 28,
+        }
+    });
+    const captions = new CaptionGenerator({
+        transcript,
+        typefaceFontProvider,
+        normalStyle,
+        normalFont: font,
+        highlightStyle,
+        highlightFont: font,
+        startTime: 0,
+        endTime: transcript.endTime,
+        chunkDuration: 5000,
+        width: 325,
+        fancyStyle: 'opacity',
+    });
+    const pixiTexture = Texture.from(canvas);
+    const pixiSprite = new Sprite(pixiTexture);
+    pixiSprite.x = 35;
+    pixiSprite.y = 130;
+    app.stage.addChild(pixiSprite);
+
+    // create a looping timeline
+    const timeline = new Timeline();
+    const progressTimeline = new ProgressTimeline({
+        start: 0,
+        end: transcript.duration,
+        loop: true,
+        onLoopCallBack: () => {
+            // restart audio when our timeline loops
+            video.currentTime = 0.0;
+        }
+    });
+
+    //  ----------------------------------------------------------
+    // NOTE: this initial draw takes 40ms for layout and 40ms for flush.
+    // After that it takes about 85ms.
+
+    const skiaDraw = () => {
+        captions.draw(skiaCanvas);
+    }
+
+    const pixiDraw = () => {
+        stats.begin();
+
+        if (video.paused) {
+            video.play();
+            timeline.reset();
+        }
+
+        // update time
+        const currentTime = timeline.currentTime;
+        const progress = progressTimeline.value(currentTime);
+        const time = progress * progressTimeline.end;
+        captions.currentTime = time;
+
+        // draw changes
+        surface.requestAnimationFrame(skiaDraw);
+        pixiTexture.update();
+
+        stats.end();
+    }
+
+    document.addEventListener('click', () => {
+        app.ticker.add(pixiDraw);
+        app.ticker.start();
+        document.body.appendChild((app as any).view);
+        click.style.display = 'none';
+
+        video.muted = false;
+        video.pause();
+        video.currentTime = 0.0;
+    });
+}
+
 // drawGradient()
 // drawRomanTextAndSelectObject();
 // drawBengaliTextAndSelectWord();
@@ -1143,5 +1309,5 @@ const transcriptToAnimation = async() => {
 // drawDynamicHighlight();
 // drawLottie()
 // drawSkiaInPixi();
-
-transcriptToAnimation();
+// transcriptToAnimation();
+transcriptToAnimation2();

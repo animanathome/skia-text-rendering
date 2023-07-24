@@ -44,7 +44,11 @@ class Caption {
     _canvasKit: CanvasKit | null = null;
     _parent: CaptionGenerator;
 
+    // skia normal style word metrics
     _skiaWords: any[] = [];
+
+    // skia highlight style word metrics
+    _skiaHighlightWords: any[] = [];
 
     constructor(options: {
         transcript: Transcript,
@@ -74,9 +78,17 @@ class Caption {
         const words = this._transcript.words.map((word) => word.text);
         this._skiaWords = words
             .map(word => {
-            const result = getParagraph(word, this.canvasKit, this.parent.normalStyle, this.parent.typefaceProvider, this.parent.normalFont);
-            return result;
-        });
+                const result = getParagraph(word, this.canvasKit, this.parent.normalStyle, this.parent.typefaceProvider, this.parent.normalFont);
+                return result;
+            });
+
+        if (this.parent.highlightStyle && this.parent.highlightFont) {
+            this._skiaHighlightWords = words
+                .map(word => {
+                    const result = getParagraph(word, this.canvasKit, this.parent.highlightStyle, this.parent.typefaceProvider, this.parent.highlightFont);
+                    return result;
+                })
+        }
     }
 
     draw(canvas: Canvas) {
@@ -96,7 +108,6 @@ class Caption {
         let xPosition = [xOffset];
         let yPosition = [yOffset];
         this._skiaWords.forEach(({text, paragraph, width, lineHeight}, index) => {
-            // console.log('draw', text, xOffset, yOffset)
             canvas.drawParagraph(paragraph, xOffset, yOffset);
 
             xOffset += width + this.parent.space;
@@ -108,29 +119,55 @@ class Caption {
             yPosition.push(yOffset);
         })
 
-        // Dynamic highlight
-        const activeWordIndex = this._transcript.getActiveWordIndex(this.parent.currentTime);
-        if (activeWordIndex !== -1 && this._skiaWords[activeWordIndex]) {
-            const graphicPaint = new this.canvasKit.Paint();
-            graphicPaint.setBlendMode(this.canvasKit.BlendMode.DstOver);
-            const color = this.canvasKit.Color(146, 95, 248);
-            graphicPaint.setColor(color);
-            graphicPaint.setStyle(this.canvasKit.PaintStyle.Fill);
+        // opacity - increase the opacity of the currently and previously spoken word
+        if (this.parent.fancyStyle === 'opacity') {
+            // NOTE: we'll probably want to hang onto the last active word as sometimes there's a break between words
+            // which means no word is active, but we still want to highlight all words that were spoken
 
-            let x = xPosition[activeWordIndex];
-            let y = yPosition[activeWordIndex];
-            let {width, lineHeight} = this._skiaWords[activeWordIndex];
-            x -= padding.left;
-            y -= padding.top;
-            width += padding.left + padding.right;
-            const height = lineHeight + padding.top + padding.bottom;
+            // highlight all words that have been spoken up to the current time
+            const activeWordIndex = this._transcript.getActiveWordIndex(this.parent.currentTime);
+            if (activeWordIndex !== -1 && this._skiaHighlightWords[activeWordIndex]) {
+                for (let i = 0; i <= activeWordIndex; i++) {
+                    const {paragraph} = this._skiaHighlightWords[i];
+                    canvas.drawParagraph(paragraph, xPosition[i], yPosition[i]);
+                }
+            }
 
-            const graphicPath = new this.canvasKit.Path();
-            graphicPath.addRect(this.canvasKit.XYWHRect(x, y, width, height));
-            canvas.drawPath(graphicPath, graphicPaint);
+            // highlight everything once we're past the end time but haven't started the next chunk
+            if (this._transcript.getLastWord().endTime < this.parent.currentTime) {
+                for (let i = 0; i < this._skiaHighlightWords.length; i++) {
+                    const {paragraph} = this._skiaHighlightWords[i];
+                    canvas.drawParagraph(paragraph, xPosition[i], yPosition[i]);
+                }
+            }
 
-            graphicPath.delete();
-            graphicPaint.delete();
+        }
+
+        // highlight - the currently active word
+        if (this.parent.fancyStyle === 'highlight') {
+            const activeWordIndex = this._transcript.getActiveWordIndex(this.parent.currentTime);
+            if (activeWordIndex !== -1 && this._skiaWords[activeWordIndex]) {
+                const graphicPaint = new this.canvasKit.Paint();
+                graphicPaint.setBlendMode(this.canvasKit.BlendMode.DstOver);
+                const color = this.canvasKit.Color(146, 95, 248);
+                graphicPaint.setColor(color);
+                graphicPaint.setStyle(this.canvasKit.PaintStyle.Fill);
+
+                let x = xPosition[activeWordIndex];
+                let y = yPosition[activeWordIndex];
+                let {width, lineHeight} = this._skiaWords[activeWordIndex];
+                x -= padding.left;
+                y -= padding.top;
+                width += padding.left + padding.right;
+                const height = lineHeight + padding.top + padding.bottom;
+
+                const graphicPath = new this.canvasKit.Path();
+                graphicPath.addRect(this.canvasKit.XYWHRect(x, y, width, height));
+                canvas.drawPath(graphicPath, graphicPaint);
+
+                graphicPath.delete();
+                graphicPaint.delete();
+            }
         }
     }
 
@@ -149,36 +186,50 @@ export class CaptionGenerator {
     chunkDuration : number;
     private _currentTime = -1;
 
-    private _normalStyle: ParagraphStyle;
     private _typefaceProvider: TypefaceFontProvider
+    private _normalStyle: ParagraphStyle;
+    private _highlightStyle: ParagraphStyle | null = null;
     private _normalFont: Font;
+    private _highlightFont: Font | null = null;
     private _width: number;
 
     private _previousActiveChunk = -1;
     private _activeCaption : Caption | null = null;
 
+    fancyStyle: string;
+
     constructor(options: {
         transcript: Transcript,
 
-        normalStyle: ParagraphStyle,
         typefaceFontProvider: TypefaceFontProvider,
+        normalStyle: ParagraphStyle,
         normalFont: Font,
+        highlightStyle?: ParagraphStyle,
+        highlightFont?: Font,
+
         width?: number,
 
         startTime?: number,
         endTime?: number,
         chunkDuration?: number
+
+        fancyStyle: string,
     }) {
         this._transcript = options.transcript;
 
-        this._normalStyle = options.normalStyle;
         this._typefaceProvider = options.typefaceFontProvider;
+        this._normalStyle = options.normalStyle;
         this._normalFont = options.normalFont;
+        this._highlightStyle = options.highlightStyle || null;
+        this._highlightFont = options.highlightFont || null;
+
         this._width = options.width || 250;
 
         this.startTime = options.startTime || 0;
         this.endTime = options.endTime || 1000;
         this.chunkDuration = options.chunkDuration || 1000;
+
+        this.fancyStyle = options.fancyStyle;
     }
 
     get space() {
@@ -197,16 +248,24 @@ export class CaptionGenerator {
         return this._transcript;
     }
 
-    public get normalStyle() {
-        return this._normalStyle;
-    }
-
     public get typefaceProvider() {
         return this._typefaceProvider;
     }
 
+    public get normalStyle() {
+        return this._normalStyle;
+    }
+
     public get normalFont() {
         return this._normalFont;
+    }
+
+    public get highlightStyle() {
+        return this._highlightStyle;
+    }
+
+    public get highlightFont() {
+        return this._highlightFont;
     }
 
     get chunkCount() {
@@ -254,6 +313,10 @@ export class CaptionGenerator {
             return;
         }
         this._previousActiveChunk = activeChunk;
+
+        // NOTE: we don't take bounds into account here. We just get all the words within the given chunk duration
+        // if we want to take bounds into account, we'll have to rework this quite a bit as we'll first want to layout
+        // out all the words first, so we know their width and height to chunk bounds.
         const {startTime, endTime} = this.getChunkTimeRange(activeChunk);
         const transcript = this.transcript.createTranscriptFromTimeRange(startTime, endTime)
 

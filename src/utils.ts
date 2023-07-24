@@ -65,9 +65,11 @@ export const glyphHeights = (bounds) => {
 /**
  * HARDCODED method which converts the project transcript into timeline parameters
  */
-export const simplifyTranscript = (TRANSCRIPT) => {
+export const simplifyTranscript = (TRANSCRIPT, groupId='72f7ad49-c114-cf11-a619-14fa385d020f') => {
     // scene group id
-    const root = TRANSCRIPT['72f7ad49-c114-cf11-a619-14fa385d020f'];
+    if (!TRANSCRIPT[groupId]) throw new Error('Invalid group id');
+
+    const root = TRANSCRIPT[groupId];
     const language = root['language'];
     const textDirection = root.editorState.root.direction;
     const paragraph = root.editorState.root.children[0];
@@ -79,7 +81,7 @@ export const simplifyTranscript = (TRANSCRIPT) => {
                 endTime: word.endTime,
             }
         })
-        .filter(word => word.text !== ' ');
+        .filter(word => word.text !== ' ' && word.text !== undefined)
     return {
         language,
         textDirection,
