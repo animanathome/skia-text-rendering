@@ -1,8 +1,9 @@
 import Stats from 'stats.js';
 import type {FontBlock} from "canvaskit-wasm";
 import {
+    drawRectangle,
     getArrayMetrics,
-    getParagraph, loadAudio,
+    getParagraph, getWords, loadAudio,
     simplifyTranscript,
     textMetrics,
 } from "./utils";
@@ -17,6 +18,7 @@ import CHRIS_TRANSCRIPT from '../resources/transcript_chris_talking.json';
 import {CaptionGenerator} from "./captions";
 import {Transcript} from "./transcript";
 import {loadCanvasKit} from "./canvasKit";
+import LANGUAGES from "./library";
 
 const loadFont = async(fontUrl) => {
     const buffer = await fetch(fontUrl);
@@ -24,28 +26,33 @@ const loadFont = async(fontUrl) => {
 }
 
 // TODO: get shapes
-const drawRomanTextAndSelectObject = async() => {
+const drawTextAndSelectObject = async(languageIndex: number) => {
+    if (languageIndex === undefined) {
+        throw new Error('languageIndex is undefined');
+    }
     const canvasKit = await loadCanvasKit() as any;
     const canvas = document.createElement('canvas');
     canvas.width = 600;
-    canvas.height = 600;
+    canvas.height = 60;
     document.body.appendChild(canvas);
-    canvas.id = 'canvas';
+    canvas.id = `canvas_${languageIndex}`;
     const surface = canvasKit.MakeWebGLCanvasSurface(canvas.id);
 
-    const notoData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSans-Medium.ttf');
-    const notoBengaliData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSansBengali-Regular.ttf');
-    const notoHebrewData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSansHebrew-Medium.ttf');
-    const notoChineseData = await loadFont('https://storage.googleapis.com/lumen5-site-css/NotoSansSC-Medium.otf');
-    const emojiData = await loadFont('https://storage.googleapis.com/skia-cdn/misc/NotoColorEmoji.ttf');
-    const str = 'Tge quick brown fox 🦊 ate a zesty hamburger 🍔.\nThe 👩‍👩‍👧‍👧 laughed.';
+    const languages = Object.keys(LANGUAGES);
+    const {family: fontFamily, url: fontUrl, text, locales, direction} = LANGUAGES[languages[languageIndex]];
+    const words = getWords(text, locales, direction);
+
+    const fontSize = 36;
+    const fontData = await loadFont(fontUrl);
+    const typeFace = canvasKit.Typeface.MakeFreeTypeFaceFromData(fontData);
+    const font = new canvasKit.Font(typeFace, fontSize);
 
     const draw = (canvas) => {
         const fontPaint = new canvasKit.Paint();
         fontPaint.setStyle(canvasKit.PaintStyle.Fill);
         fontPaint.setAntiAlias(true);
 
-        const fontMgr = canvasKit.FontMgr.FromData([notoData, notoBengaliData, notoHebrewData, notoChineseData, emojiData]);
+        const fontMgr = canvasKit.FontMgr.FromData([fontData]);
         const fontCount = fontMgr.countFamilies();
         const fontFamilyNames : string[] = [];
         for (let i = 0; i < fontCount; i++) {
@@ -55,34 +62,75 @@ const drawRomanTextAndSelectObject = async() => {
             textStyle: {
                 color: canvasKit.BLACK,
                 fontFamilies: fontFamilyNames,
-                fontSize: 50,
+                fontSize: 36,
+                heightMultiplier: 1.0,
                 halfLeading: false,
-                heightMultiplier: 1.2,
+                // https://stackoverflow.com/questions/56910191/what-is-the-difference-between-alphabetic-and-ideographic-in-flutters-textbasel
+                textBaseline: canvasKit.TextBaseline.Alphabetic,
             },
-            textAlign: canvasKit.TextAlign.Left,
-            maxLines: 7,
-            ellipsis: '...',
         });
-        const builder = canvasKit.ParagraphBuilder.Make(paraStyle, fontMgr);
-        builder.addText(str);
-        const paragraph = builder.build();
-        paragraph.layout(450);
-        canvas.drawParagraph(paragraph, 10, 10);
 
-        // none of the different ways of getting the accurate width of the paragraph
-        const width = paragraph.getMaxWidth();
-        const height = paragraph.getHeight();
+        const xPos = 0;
+        const yPos = 10;
+        let xOffset = xPos;
+        const space = fontSize * 0.2;
 
-        const rectanglePaint = new canvasKit.Paint();
-        rectanglePaint.setStyle(canvasKit.PaintStyle.Fill);
-        rectanglePaint.setColor(canvasKit.RED);
-        rectanglePaint.setAlphaf(0.5);
-        rectanglePaint.setAntiAlias(true);
+        let gBaseline = 0;
+        let gWidth = 0;
+        let mDescent = 0;
+        let mAscent = 0;
+        words.forEach((word, index) => {
+            const builder = canvasKit.ParagraphBuilder.Make(paraStyle, fontMgr);
+            builder.addText(word);
+            const paragraph = builder.build();
+            paragraph.layout(450);
 
-        const path = new canvasKit.Path();
-        path.addRect(canvasKit.XYWHRect(10, 10, width, height));
-        canvas.drawPath(path, rectanglePaint);
+            canvas.drawParagraph(paragraph, xOffset, yPos);
+
+            const lineMetrics = paragraph.getLineMetrics()[0];
+            const baseLine = lineMetrics.baseline;
+
+            const glyphIds = font.getGlyphIDs(word);
+            const glyphBounds = font.getGlyphBounds(glyphIds);
+            const width = paragraph.getMinIntrinsicWidth();
+
+            let minTop = Infinity;
+            let maxBottom = -Infinity;
+            for (let i = 0; i < glyphBounds.length / 4; i++) {
+                const index = i * 4;
+                const top = glyphBounds[index + 1];
+                const bottom = glyphBounds[index + 3];
+                if (minTop > top) minTop = top;
+                if (maxBottom < bottom) maxBottom = bottom;
+            }
+            minTop = Math.abs(minTop);
+            if (mAscent < minTop) mAscent = minTop;
+            if (mDescent < maxBottom) mDescent = maxBottom;
+
+            const y = yPos - (minTop - baseLine);
+            const height = minTop + maxBottom;
+
+            if (index === 1 ) {
+                drawRectangle(canvasKit, canvas, xOffset, y, width, height, 'rgba(255, 0, 0, 0.5)');
+            }
+            if (index === 2 ) {
+                drawRectangle(canvasKit, canvas, xOffset, y, width, height, 'rgba(0, 255, 0, 0.5)');
+            }
+            if (index === 3 ) {
+                drawRectangle(canvasKit, canvas, xOffset, y, width, height, 'rgba(0, 0, 255, 0.5)');
+            }
+
+            xOffset += width + space;
+            gWidth += width + space;
+            gBaseline = baseLine;
+        });
+
+        drawRectangle(canvasKit, canvas, xPos, yPos + gBaseline - mAscent, gWidth, 1, 'rgba(255, 0, 0, 0.5)');
+        drawRectangle(canvasKit, canvas, xPos, yPos, gWidth, 1, 'rgba(0, 0, 0, 0.5)');
+        drawRectangle(canvasKit, canvas, xPos, yPos +gBaseline, gWidth, 1, 'rgba(0, 0, 0, 0.5)');
+        drawRectangle(canvasKit, canvas, xPos, yPos +gBaseline + mDescent, gWidth, 1, 'rgba(255, 0, 0, 0.5)');
     };
+    // draw once
     surface.requestAnimationFrame(draw);
 }
 
@@ -1075,7 +1123,11 @@ const transcriptToAnimation = async() => {
         endTime: transcript.endTime,
         chunkDuration: 2600,
         width: 350,
-        fancyStyle: 'highlight',
+        fancyStyle: {
+            style: 'highlight',
+            level: 'word',
+            interpolation: 'stepped',
+        },
     });
     const pixiTexture = Texture.from(canvas);
     const pixiSprite = new Sprite(pixiTexture);
@@ -1235,12 +1287,16 @@ const transcriptToAnimation2 = async() => {
         endTime: transcript.endTime,
         chunkDuration: 5000,
         width: 325,
-        fancyStyle: 'opacity',
+        fancyStyle: {
+            style: 'opacity',
+            level: 'word',
+            interpolation: 'stepped',
+        },
     });
     const pixiTexture = Texture.from(canvas);
     const pixiSprite = new Sprite(pixiTexture);
     pixiSprite.x = 35;
-    pixiSprite.y = 130;
+    pixiSprite.y = 200;
     app.stage.addChild(pixiSprite);
 
     // create a looping timeline
@@ -1297,7 +1353,11 @@ const transcriptToAnimation2 = async() => {
 }
 
 // drawGradient()
-// drawRomanTextAndSelectObject();
+drawTextAndSelectObject(0);
+drawTextAndSelectObject(1);
+drawTextAndSelectObject(2);
+drawTextAndSelectObject(3);
+drawTextAndSelectObject(4);
 // drawBengaliTextAndSelectWord();
 // drawMaskedText();
 // drawText();
@@ -1310,4 +1370,4 @@ const transcriptToAnimation2 = async() => {
 // drawLottie()
 // drawSkiaInPixi();
 // transcriptToAnimation();
-transcriptToAnimation2();
+// transcriptToAnimation2();

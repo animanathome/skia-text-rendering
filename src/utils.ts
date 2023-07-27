@@ -17,6 +17,14 @@ export const getParagraph = (text, canvasKit, style, fontMgr) => {
     }
 }
 
+export const drawRectangle = (canvasKit, canvas, x, y, width, height, color) => {
+    const paint = new canvasKit.Paint();
+    paint.setColor(canvasKit.parseColorString(color));
+    paint.setStyle(canvasKit.PaintStyle.Fill);
+    const rect = canvasKit.XYWHRect(x, y, width, height);
+    canvas.drawRect(rect, paint);
+}
+
 export const getArrayMetrics = (array, font, paint) => {
     const arrayMetrics: any[] = [];
     let xOffset = 0;
@@ -46,11 +54,10 @@ export const textMetrics = (text, font, paint) => {
 }
 
 export const glyphHeights = (bounds) => {
-    let index = 0;
     let minTop = 0;
     let maxBottom = 0;
     for (let i = 0; i < bounds.length / 4; i++) {
-        index = i * 4;
+        const index = i * 4;
         const top = bounds[index + 1];
         const bottom = bounds[index + 3];
         if (minTop > top) minTop = top;
@@ -106,3 +113,22 @@ export const loadAudio = async(url): Promise<HTMLAudioElement> => {
     })
 }
 
+export const getWords = (text, locales, direction) => {
+     let words: string[] = [];
+
+     // @ts-ignore
+    const wordSegmenter = new Intl.Segmenter(locales, { granularity: 'word' });
+    const wordIterator = wordSegmenter.segment(text)[Symbol.iterator]();
+    for(const word of wordIterator) {
+        if (!word.isWordLike) {
+            continue;
+        }
+        words.push(word.segment);
+    }
+
+    if (direction === 'rtl') {
+        words = words.reverse();
+    }
+
+    return words;
+}

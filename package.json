@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "web-build": "webpack build --config webpack.config.js",
+    "web": "webpack build --config webpack.config.js",
     "node-build": "webpack build --config webpack.node.config.js",
     "node-run": "node scripts/main.js",
     "node": "npm run node-build && npm run node-run"

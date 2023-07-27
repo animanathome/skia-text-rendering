@@ -38,6 +38,20 @@ const getParagraph = (text, canvasKit, style, fontProvider, font) => {
     }
 }
 
+type Position = {
+    x: number,
+    y: number,
+}
+
+const getNextClosestIndex = (array, index) => {
+    for (let i = 0; i < array.length; i++) {
+        if (array[i] > index) {
+            return i;
+        }
+    }
+    return array.length - 1;
+}
+
 class Caption {
     // local transcript for the current chunk of text
     _transcript: Transcript;
@@ -45,10 +59,12 @@ class Caption {
     _parent: CaptionGenerator;
 
     // skia normal style word metrics
-    _skiaWords: any[] = [];
+    _normalWords: any[] = [];
+    _normalWordsPos: Position[] = [];
+    _normalLineIndices: number[] = [];
 
     // skia highlight style word metrics
-    _skiaHighlightWords: any[] = [];
+    _highlightWords: any[] = [];
 
     constructor(options: {
         transcript: Transcript,
@@ -56,10 +72,11 @@ class Caption {
     }) {
         this._transcript = options.transcript;
         this._parent = options.parent;
-        loadCanvasKit().then((canvasKit) => {
-            this._canvasKit = canvasKit;
-            this.build();
-        })
+        loadCanvasKit()
+            .then((canvasKit) => {
+                this._canvasKit = canvasKit;
+                this.build();
+            })
     }
 
     get parent() {
@@ -75,19 +92,42 @@ class Caption {
             console.log('no canvasKit');
             return;
         }
-        const words = this._transcript.words.map((word) => word.text);
-        this._skiaWords = words
-            .map(word => {
-                const result = getParagraph(word, this.canvasKit, this.parent.normalStyle, this.parent.typefaceProvider, this.parent.normalFont);
-                return result;
-            });
 
+        // normal style
+        const words = this._transcript.words.map((word) => word.text);
+        this._normalWords = words
+            .map((word, index) => getParagraph(word, this.canvasKit, this.parent.normalStyle, this.parent.typefaceProvider, this.parent.normalFont));
+
+        const padding = {
+            left: 3,
+            right: 3,
+            top: -4,
+            bottom: -4,
+        }
+        let xOffset = this.parent.fancyStyle.style === 'highlight' ? padding.left : 0;
+        let yOffset = this.parent.fancyStyle.style === 'highlight' ? padding.top : 0;
+        let newLine = false;
+        this._normalWordsPos.push({x: xOffset, y: yOffset});
+        this._normalWords.forEach((word, index) => {
+            xOffset += word.width + this.parent.space;
+            if (this._normalWords[index + 1] && (xOffset + this._normalWords[index + 1].width) > this.parent.width) {
+                xOffset = padding.left;
+                yOffset += word.lineHeight;
+                newLine = true;
+            }
+            else {
+                newLine = false;
+            }
+            this._normalWordsPos.push({x: xOffset, y: yOffset});
+            if (newLine) this._normalLineIndices.push(index);
+        });
+        this._normalLineIndices.push(this._normalWords.length - 1);
+        console.log('normal line indices', this._normalLineIndices, this._normalLineIndices.map(index => this._normalWordsPos[index].y));
+
+        // highlight style
         if (this.parent.highlightStyle && this.parent.highlightFont) {
-            this._skiaHighlightWords = words
-                .map(word => {
-                    const result = getParagraph(word, this.canvasKit, this.parent.highlightStyle, this.parent.typefaceProvider, this.parent.highlightFont);
-                    return result;
-                })
+            this._highlightWords = words
+                .map(word => getParagraph(word, this.canvasKit, this.parent.highlightStyle, this.parent.typefaceProvider, this.parent.highlightFont));
         }
     }
 
@@ -99,48 +139,43 @@ class Caption {
 
         // NOTE: In the link below we can see that the caption animates in from the top by both changing y and opacity
         // https://www.notion.so/lumen5/Fancy-Captions-73d2c3b362204a699eef1fddd0f5b7eb?pvs=4#cb3b981151c04db5a7838632c5b4aca6
-
-        const padding = {
-            left: 3,
-            right: 3,
-            top: -4,
-            bottom: -4,
-        }
-        let xOffset = padding.left;
-        let yOffset = padding.top;
-        let xPosition = [xOffset];
-        let yPosition = [yOffset];
-        this._skiaWords.forEach(({text, paragraph, width, lineHeight}, index) => {
-            canvas.drawParagraph(paragraph, xOffset, yOffset);
-
-            xOffset += width + this.parent.space;
-            if (this._skiaWords[index + 1] && xOffset + this._skiaWords[index + 1].width > this.parent.width) {
-                xOffset = padding.left;
-                yOffset += lineHeight;
-            }
-            xPosition.push(xOffset);
-            yPosition.push(yOffset);
+        
+        this._normalWords.forEach(({text, paragraph, width, lineHeight}, index) => {
+            const {x, y} = this._normalWordsPos[index];
+            canvas.drawParagraph(paragraph, x, y);
         })
 
         // opacity - increase the opacity of the currently and previously spoken word
-        if (this.parent.fancyStyle === 'opacity') {
+        // NOTE: here we render the text twice. In another effect we could just toggle the opacity of the text
+        if (this.parent.fancyStyle.style === 'opacity') {
             // NOTE: we'll probably want to hang onto the last active word as sometimes there's a break between words
             // which means no word is active, but we still want to highlight all words that were spoken
-
-            // highlight all words that have been spoken up to the current time
-            const activeWordIndex = this._transcript.getActiveWordIndex(this.parent.currentTime);
-            if (activeWordIndex !== -1 && this._skiaHighlightWords[activeWordIndex]) {
-                for (let i = 0; i <= activeWordIndex; i++) {
-                    const {paragraph} = this._skiaHighlightWords[i];
-                    canvas.drawParagraph(paragraph, xPosition[i], yPosition[i]);
+            if (this.parent.fancyStyle.level === 'word') {
+                // highlight all words that have been spoken up to the current time
+                const activeWordIndex = this._transcript.getActiveWordIndex(this.parent.currentTime);
+                if (activeWordIndex !== -1 && this._highlightWords[activeWordIndex]) {
+                    for (let i = 0; i <= activeWordIndex; i++) {
+                        const {paragraph} = this._highlightWords[i];
+                        canvas.drawParagraph(paragraph, this._normalWordsPos[i].x, this._normalWordsPos[i].y);
+                    }
                 }
             }
-
+            if (this.parent.fancyStyle.level === 'line') {
+                // highlight all lines that have been spoken up to the current time
+                const activeWordIndex = this._transcript.getActiveWordIndex(this.parent.currentTime);
+                if (activeWordIndex !== -1 && this._highlightWords[activeWordIndex]) {
+                    const lineEndIndex = getNextClosestIndex(this._normalLineIndices, activeWordIndex);
+                    for (let i = 0; i <= this._normalLineIndices[lineEndIndex]; i++) {
+                        const {paragraph} = this._highlightWords[i];
+                        canvas.drawParagraph(paragraph, this._normalWordsPos[i].x, this._normalWordsPos[i].y);
+                    }
+                }
+            }
             // highlight everything once we're past the end time but haven't started the next chunk
-            if (this._transcript.getLastWord().endTime < this.parent.currentTime) {
-                for (let i = 0; i < this._skiaHighlightWords.length; i++) {
-                    const {paragraph} = this._skiaHighlightWords[i];
-                    canvas.drawParagraph(paragraph, xPosition[i], yPosition[i]);
+            if (this.parent.fancyStyle.level === 'object' || this._transcript.getLastWord().endTime < this.parent.currentTime) {
+                for (let i = 0; i < this._highlightWords.length; i++) {
+                    const {paragraph} = this._highlightWords[i];
+                    canvas.drawParagraph(paragraph, this._normalWordsPos[i].x, this._normalWordsPos[i].y);
                 }
             }
         }
@@ -149,18 +184,24 @@ class Caption {
         // either a caption level or word level timeline (either way, we need to be able to map time to word level).
 
         // highlight - the currently active word
-        if (this.parent.fancyStyle === 'highlight') {
+        if (this.parent.fancyStyle.style === 'highlight') {
+            const padding = {
+                left: 3,
+                right: 3,
+                top: -4,
+                bottom: -4,
+            }
             const activeWordIndex = this._transcript.getActiveWordIndex(this.parent.currentTime);
-            if (activeWordIndex !== -1 && this._skiaWords[activeWordIndex]) {
+            if (activeWordIndex !== -1 && this._normalWords[activeWordIndex]) {
                 const graphicPaint = new this.canvasKit.Paint();
                 graphicPaint.setBlendMode(this.canvasKit.BlendMode.DstOver);
                 const color = this.canvasKit.Color(146, 95, 248);
                 graphicPaint.setColor(color);
                 graphicPaint.setStyle(this.canvasKit.PaintStyle.Fill);
 
-                let x = xPosition[activeWordIndex];
-                let y = yPosition[activeWordIndex];
-                let {width, lineHeight} = this._skiaWords[activeWordIndex];
+                let x = this._normalWordsPos[activeWordIndex].x;
+                let y = this._normalWordsPos[activeWordIndex].y;
+                let {width, lineHeight} = this._normalWords[activeWordIndex];
                 x -= padding.left;
                 y -= padding.top;
                 width += padding.left + padding.right;
@@ -177,11 +218,81 @@ class Caption {
     }
 
     destroy() {
-        this._skiaWords.forEach(paragraph => {
+        this._normalWords.forEach(paragraph => {
             paragraph.paragraph.delete();
         })
     }
 }
+
+export type FancyStyle = {
+    style: 'opacity' | 'highlight',
+    level: 'object' | 'line' | 'word',
+    interpolation: 'linear' | 'stepped'
+}
+
+
+// appear
+// chunkDuration: 1000
+// objectAnimation: [{
+//      property: 'opacity',
+//      level: 'letter', // animate word from start to end in x
+//      interpolation: 'stepped',
+//      layout: 'onTheFly',
+//      start: '0',
+//      end: '1',
+// }]
+
+// fade
+// chunkDuration: 1000
+// objectAnimation: [{
+//      property: 'opacity',
+//      level: 'letter', // animate word from start to end in x
+//      interpolation: 'linear',
+//      layout: 'atTheStart',
+//      start: 0,
+//      end: 1,
+// }]
+
+// swipe
+// chunkDuration: 1000
+// objectAnimation: [{
+//      property: 'opacity',
+//      level: 'word',
+//      interpolation: 'linear',
+//      layout: 'atTheStart',
+//      start: 0,
+//      end: 1,
+// },
+// {
+//      property: 'x',
+//      level: 'word',
+//      interpolation: 'linear',
+//      layout: 'atTheStart',
+//      start: 0,
+//      end: 100,
+// }]
+
+// karaoke (highlight active word)
+// chunkDuration: 1000
+// colorGraphics: [{
+//      property: 'opacity',
+//      level: 'word',
+//      interpolation: 'stepped',
+//      layout: 'atTheStart',
+//      start: 0,
+//      end: 1,
+// }]
+
+
+// not relevant dynamic styling properties
+// delay?
+// percentage offset
+// zigZagPerLine
+// zigZagPerLineStart
+// shouldOffsetPropertyValue
+// mirrorPercentageOffset
+// startMulti
+// end Multi
 
 export class CaptionGenerator {
     // global transcript container the entire transcript of the media
@@ -201,7 +312,7 @@ export class CaptionGenerator {
     private _previousActiveChunk = -1;
     private _activeCaption : Caption | null = null;
 
-    fancyStyle: string;
+    fancyStyle: FancyStyle;
 
     constructor(options: {
         transcript: Transcript,
@@ -218,7 +329,7 @@ export class CaptionGenerator {
         endTime?: number,
         chunkDuration?: number
 
-        fancyStyle: string,
+        fancyStyle: FancyStyle,
     }) {
         this._transcript = options.transcript;
 
